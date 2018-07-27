@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/mholt/caddy"
+	"github.com/mholt/caddy/caddytls"
 	_ "github.com/mholt/caddy/caddyhttp"
 )
 
@@ -17,6 +18,8 @@ func init() {
 func main() {
 	caddy.AppName = "CaddyTest"
 	caddy.AppVersion = "0.1.1"
+
+caddytls.DefaultCAUrl = "https://acme-v02.api.letsencrypt.org/directory"
 
 	// load caddyfile
 	caddyfile, err := caddy.LoadCaddyfile("http")
