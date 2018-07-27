@@ -1,0 +1,4 @@
+localhost:7777 {
+    root /home/bsinou/tmp/testcaddy
+    gzip
+}

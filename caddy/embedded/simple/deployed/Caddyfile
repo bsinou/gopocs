@@ -1,0 +1,4 @@
+test-dev.sinou.org {
+    root /tmp/testcaddy
+    gzip
+}

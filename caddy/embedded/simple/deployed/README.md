@@ -1,0 +1,1 @@
+Very basic example to experiment with an embedded caddy.
