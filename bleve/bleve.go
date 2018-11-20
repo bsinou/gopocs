@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"github.com/blevesearch/bleve"
+	"github.com/blevesearch/bleve/index/scorch"
+	"github.com/blevesearch/bleve/index/store/boltdb"
+	"github.com/blevesearch/bleve/index/upsidedown"
 	"github.com/rs/xid"
 )
 
-// SimpleTestServer is a canonical test implementation of the Log server
-type SimpleTestServer struct {
+// TestServer is a generic index server
+type TestServer struct {
 	Index bleve.Index
 	idgen xid.ID
 }
@@ -33,13 +36,36 @@ type LogMessage struct {
 	RemoteAddress string `protobuf:"bytes,10,opt,name=RemoteAddress" json:"RemoteAddress,omitempty"`
 }
 
-// NewSimpleTestServer creates and configures a new Bleve instance if none has already been configured.
-func NewSimpleTestServer(bleveIndexPath string, deleteOnClose ...bool) (*SimpleTestServer, error) {
+// NewDefaultServer creates and configures a new Default Bleve instance if none has already been configured.
+func NewDefaultServer(bleveIndexPath string) (*TestServer, error) {
 
 	index, err := bleve.Open(bleveIndexPath)
 	if err == nil {
 		// Already existing, no needs to create
-		return &SimpleTestServer{Index: index}, nil
+		return &TestServer{Index: index}, nil
+	}
+
+	// Creates the new index and initialises the server
+	mapping := bleve.NewIndexMapping()
+	defaultMapping := bleve.NewDocumentMapping()
+
+	mapping.AddDocumentMapping("simpletest", defaultMapping)
+
+	if bleveIndexPath == "" {
+		index, err = bleve.NewMemOnly(mapping)
+	} else {
+		index, err = bleve.New(bleveIndexPath, mapping)
+	}
+	return &TestServer{Index: index}, nil
+}
+
+// NewDefaultServerWithMapping creates and configures a new Default Bleve instance if none has already been configured.
+func NewDefaultServerWithMapping(bleveIndexPath string) (*TestServer, error) {
+
+	index, err := bleve.Open(bleveIndexPath)
+	if err == nil {
+		// Already existing, no needs to create
+		return &TestServer{Index: index}, nil
 	}
 
 	// Creates the new index and initialises the server
@@ -56,18 +82,69 @@ func NewSimpleTestServer(bleveIndexPath string, deleteOnClose ...bool) (*SimpleT
 	msgFieldMapping := bleve.NewTextFieldMapping()
 	defaultMapping.AddFieldMappingsAt("msg", msgFieldMapping)
 
-	mapping.AddDocumentMapping("simpletest", defaultMapping)
+	mapping.AddDocumentMapping("explicitmapping", defaultMapping)
 
 	if bleveIndexPath == "" {
 		index, err = bleve.NewMemOnly(mapping)
 	} else {
 		index, err = bleve.New(bleveIndexPath, mapping)
 	}
-	return &SimpleTestServer{Index: index}, nil
+	return &TestServer{Index: index}, nil
+}
+
+// NewServerOnBolt creates and configures a bleve instance that use BoltDB if none has already been configured.
+func NewServerOnBolt(bleveIndexPath string) (*TestServer, error) {
+
+	index, err := bleve.Open(bleveIndexPath)
+	if err == nil {
+		// Already existing, no needs to create
+		return &TestServer{Index: index}, nil
+	}
+
+	// Creates the new index and initialises the server
+	mapping := bleve.NewIndexMapping()
+	defaultMapping := bleve.NewDocumentMapping()
+
+	// // Specific fields
+	// standardFieldMapping := bleve.NewTextFieldMapping()
+	// defaultMapping.AddFieldMappingsAt("level", standardFieldMapping)
+	// dateFieldMapping := bleve.NewDateTimeFieldMapping()
+	// defaultMapping.AddFieldMappingsAt("ts", dateFieldMapping)
+	// msgFieldMapping := bleve.NewTextFieldMapping()
+	// defaultMapping.AddFieldMappingsAt("msg", msgFieldMapping)
+
+	mapping.AddDocumentMapping("dft-on-bolt", defaultMapping)
+	index, err = bleve.NewUsing(bleveIndexPath, mapping, upsidedown.Name, boltdb.Name, nil)
+
+	// config := map[string]interface{}{
+	//     "nosync": true,
+	// }
+	// index, err := bleve.NewUsing(bleveIndexPath, mapping, upsidedown.Name, boltdb.Name, config)
+
+	return &TestServer{Index: index}, nil
+}
+
+// NewServerOnScorch creates and configures a bleve instance that use BoltDB if none has already been configured.
+func NewServerOnScorch(bleveIndexPath string) (*TestServer, error) {
+
+	index, err := bleve.Open(bleveIndexPath)
+	if err == nil {
+		// Already existing, no needs to create
+		return &TestServer{Index: index}, nil
+	}
+
+	// Creates the new index and initialises the server
+	mapping := bleve.NewIndexMapping()
+	defaultMapping := bleve.NewDocumentMapping()
+
+	mapping.AddDocumentMapping("dft-on-scorch", defaultMapping)
+	index, err = bleve.NewUsing(bleveIndexPath, mapping, scorch.Name, boltdb.Name, nil)
+
+	return &TestServer{Index: index}, nil
 }
 
 // PutLog stores a new log msg. It expects a map[string]string.
-func (s *SimpleTestServer) PutLog(line map[string]string) error {
+func (s *TestServer) PutLog(line map[string]string) error {
 	msg, err := toIndexableMsg(line)
 	if err != nil {
 		return err
