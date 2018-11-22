@@ -3,9 +3,12 @@ package bleve
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/blevesearch/bleve"
+	"github.com/blevesearch/bleve/analysis/analyzer/keyword"
+	"github.com/blevesearch/bleve/analysis/lang/en"
 	"github.com/blevesearch/bleve/index/scorch"
 	"github.com/blevesearch/bleve/index/store/boltdb"
 	"github.com/blevesearch/bleve/index/upsidedown"
@@ -70,28 +73,46 @@ func NewDefaultServerWithMapping(bleveIndexPath, sname string) (*TestServer, err
 		return &TestServer{Index: index, name: sname}, nil
 	}
 
+	// a generic reusable mapping for english text
+	englishTextFieldMapping := bleve.NewTextFieldMapping()
+	englishTextFieldMapping.Analyzer = en.AnalyzerName
+	// a generic reusable mapping for timestamps
+	dateFieldMapping := bleve.NewDateTimeFieldMapping()
+	// a generic reusable mapping for numbers
+	numFieldMapping := bleve.NewNumericFieldMapping()
+	// logger, level and user name are analysed as keywords
+	keywordFieldMapping := bleve.NewTextFieldMapping()
+	keywordFieldMapping.Analyzer = keyword.Name
+
+	// 	initialise specific document mapping
+	explicitMapping := bleve.NewDocumentMapping()
+
+	// Messages are analysed as english
+	explicitMapping.AddFieldMappingsAt("msg", englishTextFieldMapping)
+
+	explicitMapping.AddFieldMappingsAt("level", keywordFieldMapping)
+	explicitMapping.AddFieldMappingsAt("UserName", keywordFieldMapping)
+	explicitMapping.AddFieldMappingsAt("logger", keywordFieldMapping)
+
+	// Message ID uses numeric field mapping
+	explicitMapping.AddFieldMappingsAt("MsgId", numFieldMapping)
+
+	// timestamps uses the date field mapping
+	explicitMapping.AddFieldMappingsAt("ts", dateFieldMapping)
+
+	// We do not index Remote address for the time being… Should then be left out of the index
+
 	// Creates the new index and initialises the server
 	mapping := bleve.NewIndexMapping()
-	defaultMapping := bleve.NewDocumentMapping()
-
-	// Specific fields
-	standardFieldMapping := bleve.NewTextFieldMapping()
-	defaultMapping.AddFieldMappingsAt("level", standardFieldMapping)
-
-	dateFieldMapping := bleve.NewDateTimeFieldMapping()
-	defaultMapping.AddFieldMappingsAt("ts", dateFieldMapping)
-
-	msgFieldMapping := bleve.NewTextFieldMapping()
-	defaultMapping.AddFieldMappingsAt("msg", msgFieldMapping)
-
-	mapping.AddDocumentMapping("explicitmapping", defaultMapping)
+	mapping.AddDocumentMapping("explicitmapping", explicitMapping)
 
 	if bleveIndexPath == "" {
 		index, err = bleve.NewMemOnly(mapping)
 	} else {
 		index, err = bleve.New(bleveIndexPath, mapping)
 	}
-	return &TestServer{Index: index, name: sname}, nil
+
+	return &TestServer{Index: index, name: sname}, err
 }
 
 // NewServerOnBolt creates and configures a bleve instance that use BoltDB if none has already been configured.
@@ -106,14 +127,6 @@ func NewServerOnBolt(bleveIndexPath, sname string) (*TestServer, error) {
 	// Creates the new index and initialises the server
 	mapping := bleve.NewIndexMapping()
 	defaultMapping := bleve.NewDocumentMapping()
-
-	// // Specific fields
-	// standardFieldMapping := bleve.NewTextFieldMapping()
-	// defaultMapping.AddFieldMappingsAt("level", standardFieldMapping)
-	// dateFieldMapping := bleve.NewDateTimeFieldMapping()
-	// defaultMapping.AddFieldMappingsAt("ts", dateFieldMapping)
-	// msgFieldMapping := bleve.NewTextFieldMapping()
-	// defaultMapping.AddFieldMappingsAt("msg", msgFieldMapping)
 
 	mapping.AddDocumentMapping("dft-on-bolt", defaultMapping)
 	index, err = bleve.NewUsing(bleveIndexPath, mapping, upsidedown.Name, boltdb.Name, nil)
@@ -163,6 +176,61 @@ func (s *TestServer) PutLog(line map[string]string) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (s *TestServer) BatchIndex(lines []string, batchSize int) error {
+
+	fmt.Printf("Indexing in %s\n", s.GetName())
+
+	count := 0
+	startTime := time.Now()
+	batch := s.Index.NewBatch()
+	batchCount := 0
+
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		currLogMsg, err := toIndexableMsg(Json2map(line))
+		if err != nil {
+			fmt.Printf("[ERROR] failed to prepare line[%d] - %s : %s \n", i, line, err.Error())
+			return err
+		}
+
+		batch.Index(xid.New().String(), currLogMsg)
+		batchCount++
+
+		if batchCount >= batchSize {
+			err = s.Index.Batch(batch)
+			if err != nil {
+				return err
+			}
+			batch = s.Index.NewBatch()
+			batchCount = 0
+		}
+		count++
+		if count%1000 == 0 {
+			indexDuration := time.Since(startTime)
+			indexDurationSeconds := float64(indexDuration) / float64(time.Second)
+			timePerDoc := float64(indexDuration) / float64(count)
+			fmt.Printf("Indexed %d documents, in %.2fs (average %.2fms/doc)\n", count, indexDurationSeconds, timePerDoc/float64(time.Millisecond))
+		}
+	}
+
+	// flush the last batch
+	if batchCount > 0 {
+		err := s.Index.Batch(batch)
+		if err != nil {
+			return err
+		}
+	}
+	indexDuration := time.Since(startTime)
+	indexDurationSeconds := float64(indexDuration) / float64(time.Second)
+	timePerDoc := float64(indexDuration) / float64(count)
+	fmt.Printf("Indexed %d documents, in %.2fs (average %.2fms/doc)\n", count, indexDurationSeconds, timePerDoc/float64(time.Millisecond))
+
 	return nil
 }
 

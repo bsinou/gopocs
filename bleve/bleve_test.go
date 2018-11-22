@@ -11,8 +11,10 @@ import (
 
 const (
 	// Enter the path to your audit.bleve db that you want to populate with dummy data
-	workingDir = "/home/bsinou/tmp/test/bleve/2018-11-18"
+	workingDir = "/home/bsinou/tmp/test/bleve/2018-11-22"
 	// workingDir = ""
+	// Use "en" or "fr" to generate randome messages in English or French
+	lang = "en"
 	// Raise this if you want more events: +1 adds 1k new events, but it takes longer to index.
 	loopNb = 20
 	// set this flag to true to reduce the size of the sample data set
@@ -43,7 +45,7 @@ func TestFillBleveDB(t *testing.T) {
 	fmt.Printf("\n#### Initializing environment at %s\n", workingDir)
 
 	Convey(fmt.Sprintf("Given a test corpus of %dk log messages", loopNb), t, func() {
-		lines := GenerateDummyData(loopNb, useSmallSample)
+		lines := GenerateDummyData(lang, loopNb, useSmallSample)
 
 		Convey("Index in the default store\n", func() {
 			var err error

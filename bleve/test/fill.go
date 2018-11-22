@@ -13,8 +13,10 @@ var (
 
 const (
 	// Enter the path to your audit.bleve db that you want to populate with dummy data
-	workingDir = "/home/bsinou/tmp/test/bleve/2018-11-21"
+	workingDir = "/home/bsinou/tmp/test/bleve/2018-11-22"
 	// workingDir = ""
+	// Use "en" or "fr" to generate randome messages in English or French
+	lang = "en"
 	// Raise this if you want more events: +1 adds 1k new events, but it takes longer to index.
 	loopNb = 100
 	// set this flag to true to reduce the size of the sample data set
@@ -33,14 +35,17 @@ func main() {
 		return
 	}
 
-	lines := ownbleve.GenerateDummyData(loopNb, useSmallSample)
+	lines := ownbleve.GenerateDummyData(lang, loopNb, useSmallSample)
 
 	fmt.Printf("### [Info] Launching index on %s with %dk lines.\n", dStore.GetName(), loopNb)
-	fullPut(dStore, dStore.GetName(), lines)
+	dStore.BatchIndex(lines, 100)
+	fmt.Printf("### [Info] Launching index on %s with %dk lines.\n", withMapping.GetName(), loopNb)
+	withMapping.BatchIndex(lines, 100)
 	// fmt.Printf("### [Info] Launching index on %s with %dk lines.\n", boltStore.GetName(), loopNb)
 	// fullPut(boltStore, boltStore.GetName(), lines)
 	fmt.Printf("### [Info] Launching index on %s with %dk lines.\n", scorchStore.GetName(), loopNb)
-	fullPut(scorchStore, scorchStore.GetName(), lines)
+	scorchStore.BatchIndex(lines, 100)
+	// fullPut(scorchStore, scorchStore.GetName(), lines)
 }
 
 func initialisesStores() error {
@@ -49,6 +54,13 @@ func initialisesStores() error {
 	sname := "defaultStore"
 	path := fmt.Sprintf("%s/test-%dk-%s.bleve", workingDir, loopNb, sname)
 	dStore, err = ownbleve.NewDefaultServer(path, sname)
+	if err != nil {
+		return fmt.Errorf("fail to create %s index, cause: %s", sname, err.Error())
+	}
+
+	sname = "withMappingStore"
+	path = fmt.Sprintf("%s/test-%dk-%s.bleve", workingDir, loopNb, sname)
+	withMapping, err = ownbleve.NewDefaultServerWithMapping(path, sname)
 	if err != nil {
 		return fmt.Errorf("fail to create %s index, cause: %s", sname, err.Error())
 	}
