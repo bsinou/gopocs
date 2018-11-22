@@ -1,6 +1,7 @@
 package bleve
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 // TestServer is a generic index server
 type TestServer struct {
+	name  string
 	Index bleve.Index
 	idgen xid.ID
 }
@@ -37,12 +39,12 @@ type LogMessage struct {
 }
 
 // NewDefaultServer creates and configures a new Default Bleve instance if none has already been configured.
-func NewDefaultServer(bleveIndexPath string) (*TestServer, error) {
+func NewDefaultServer(bleveIndexPath, sname string) (*TestServer, error) {
 
 	index, err := bleve.Open(bleveIndexPath)
 	if err == nil {
 		// Already existing, no needs to create
-		return &TestServer{Index: index}, nil
+		return &TestServer{Index: index, name: sname}, nil
 	}
 
 	// Creates the new index and initialises the server
@@ -56,16 +58,16 @@ func NewDefaultServer(bleveIndexPath string) (*TestServer, error) {
 	} else {
 		index, err = bleve.New(bleveIndexPath, mapping)
 	}
-	return &TestServer{Index: index}, nil
+	return &TestServer{Index: index, name: sname}, nil
 }
 
 // NewDefaultServerWithMapping creates and configures a new Default Bleve instance if none has already been configured.
-func NewDefaultServerWithMapping(bleveIndexPath string) (*TestServer, error) {
+func NewDefaultServerWithMapping(bleveIndexPath, sname string) (*TestServer, error) {
 
 	index, err := bleve.Open(bleveIndexPath)
 	if err == nil {
 		// Already existing, no needs to create
-		return &TestServer{Index: index}, nil
+		return &TestServer{Index: index, name: sname}, nil
 	}
 
 	// Creates the new index and initialises the server
@@ -89,16 +91,16 @@ func NewDefaultServerWithMapping(bleveIndexPath string) (*TestServer, error) {
 	} else {
 		index, err = bleve.New(bleveIndexPath, mapping)
 	}
-	return &TestServer{Index: index}, nil
+	return &TestServer{Index: index, name: sname}, nil
 }
 
 // NewServerOnBolt creates and configures a bleve instance that use BoltDB if none has already been configured.
-func NewServerOnBolt(bleveIndexPath string) (*TestServer, error) {
+func NewServerOnBolt(bleveIndexPath, sname string) (*TestServer, error) {
 
 	index, err := bleve.Open(bleveIndexPath)
 	if err == nil {
 		// Already existing, no needs to create
-		return &TestServer{Index: index}, nil
+		return &TestServer{Index: index, name: sname}, nil
 	}
 
 	// Creates the new index and initialises the server
@@ -121,16 +123,16 @@ func NewServerOnBolt(bleveIndexPath string) (*TestServer, error) {
 	// }
 	// index, err := bleve.NewUsing(bleveIndexPath, mapping, upsidedown.Name, boltdb.Name, config)
 
-	return &TestServer{Index: index}, nil
+	return &TestServer{Index: index, name: sname}, nil
 }
 
 // NewServerOnScorch creates and configures a bleve instance that use BoltDB if none has already been configured.
-func NewServerOnScorch(bleveIndexPath string) (*TestServer, error) {
+func NewServerOnScorch(bleveIndexPath, sname string) (*TestServer, error) {
 
 	index, err := bleve.Open(bleveIndexPath)
 	if err == nil {
 		// Already existing, no needs to create
-		return &TestServer{Index: index}, nil
+		return &TestServer{Index: index, name: sname}, nil
 	}
 
 	// Creates the new index and initialises the server
@@ -140,7 +142,14 @@ func NewServerOnScorch(bleveIndexPath string) (*TestServer, error) {
 	mapping.AddDocumentMapping("dft-on-scorch", defaultMapping)
 	index, err = bleve.NewUsing(bleveIndexPath, mapping, scorch.Name, boltdb.Name, nil)
 
-	return &TestServer{Index: index}, nil
+	return &TestServer{Index: index, name: sname}, nil
+}
+
+// TestServer specific methods.
+
+// GetName simply return a name for this server.
+func (s *TestServer) GetName() string {
+	return s.name
 }
 
 // PutLog stores a new log msg. It expects a map[string]string.
@@ -210,4 +219,25 @@ func convertTimeToTs(ts time.Time) int32 {
 // Single entry point to convert Unix timestamps defined as int32 to time.Time
 func convertTsToTime(ts int32) time.Time {
 	return time.Unix(int64(ts), 0)
+}
+
+func Json2map(line string) map[string]string {
+	var rawdata map[string]interface{}
+	// var data map[string]string
+	err := json.Unmarshal([]byte(line), &rawdata)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	data := make(map[string]string)
+	for k, v := range rawdata {
+		switch v := v.(type) {
+		case string:
+			data[k] = v
+		default:
+			fmt.Printf("Cannot unmarshall object for key %s\n", k)
+		}
+	}
+
+	return data
 }
